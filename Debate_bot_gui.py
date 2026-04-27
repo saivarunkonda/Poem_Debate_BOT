@@ -32,8 +32,8 @@ class DebateBotApp:
         self.submit_button.grid(row=4, column=0, columnspan=2)
 
        
-        self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-        self.model = GPT2LMHeadModel.from_pretrained("gpt2")
+        self.tokenizer = GPT2Tokenizer.from_pretrained("gpt2", do_sample=True)
+        self.model = GPT2LMHeadModel.from_pretrained("gpt2", do_sample=True)
 
        
         self.response_history = set()
@@ -42,14 +42,6 @@ class DebateBotApp:
         context = f"The motion is '{motion}'. {stance} argues that "
         return context + prompt
 
-    def generate_unique_response(self, prompt, max_attempts=5):
-        """Generate a unique response with limited attempts to avoid infinite loops"""
-        for _ in range(max_attempts):
-            response = self.generate_response(prompt)
-            if response not in self.response_history:
-                return response
-        # If no unique response found after max attempts, return the last generated one
-        return response
     def generate_response(self, prompt, max_length=200):
         input_ids = self.tokenizer.encode(prompt, return_tensors="pt")
         output = self.model.generate(
@@ -70,38 +62,24 @@ class DebateBotApp:
 
         if motion.lower() == 'exit' or stance.lower() == 'exit':
             self.master.quit()
-            return
 
-        if not motion or not stance or not user_argument:
-            messagebox.showwarning("Input Error", "Please fill in all fields")
-            return
+        prompt_for = self.preprocess_prompt(user_argument, motion, "for")
+        prompt_against = self.preprocess_prompt(user_argument, motion, "against")
 
-        if stance.lower() not in ['for', 'against']:
-            messagebox.showwarning("Input Error", "Please type 'for' or 'against' for stance")
-            return
+        response_for = self.generate_response(prompt_for)
+        while response_for in self.response_history:
+            response_for = self.generate_response(prompt_for)
 
-        try:
-            prompt_for = self.preprocess_prompt(user_argument, motion, "for")
-            prompt_against = self.preprocess_prompt(user_argument, motion, "against")
+        response_against = self.generate_response(prompt_against)
+        while response_against in self.response_history:
+            response_against = self.generate_response(prompt_against)
 
-            response_for = self.generate_unique_response(prompt_for)
-            response_against = self.generate_unique_response(prompt_against)
+        self.response_text.insert(tk.END, "Debate Bot (For): " + response_for + "\n" + "\n")
+        self.response_text.insert(tk.END, "Debate Bot (Against): " + response_against + "\n")
+        self.response_text.insert(tk.END, "\n")
 
-            self.response_text.insert(tk.END, f"Motion: {motion}\n")
-            self.response_text.insert(tk.END, f"Your Stance: {stance}\n")
-            self.response_text.insert(tk.END, f"Your Argument: {user_argument}\n\n")
-            self.response_text.insert(tk.END, "Debate Bot (For): " + response_for + "\n\n")
-            self.response_text.insert(tk.END, "Debate Bot (Against): " + response_against + "\n")
-            self.response_text.insert(tk.END, "-" * 50 + "\n\n")
-
-            self.response_history.add(response_for)
-            self.response_history.add(response_against)
-            
-            # Clear input fields
-            self.argument_entry.delete(0, tk.END)
-            
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to generate response: {str(e)}")
+        self.response_history.add(response_for)
+        self.response_history.add(response_against)
 
 root = tk.Tk()
 app = DebateBotApp(root)
